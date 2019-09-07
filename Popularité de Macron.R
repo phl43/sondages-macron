@@ -10,6 +10,11 @@ library(rvest)
 # cette fonction analyse le contenu d'un tweet et renvoie une structure de données qui contient la date
 # à laquelle le sondage a été réalisé et la popularité de Macron d'après celui-ci
 récupérer_infos_sondage <- function(tweet) {
+  # exclue le tweet qui compare la popularité de Macron avant et après la révélation de l'affaire Benalla
+  if (str_detect(tweet, "benalla")) {
+    return(tibble())
+  }
+  
   # met toutes les dates au même format dans le tweet, ce qui est nécessaire car
   # @EuropeElects n'utilise pas toujours le même format dans ses tweets
   months_full <- str_c(month.name, collapse = "|")
@@ -23,6 +28,11 @@ récupérer_infos_sondage <- function(tweet) {
   tweet <- str_replace_all(tweet,
                            "\\'(\\d{2})",
                            "\\1")
+  if (!str_detect(tweet, "\\d{1,2}/\\d{2}/\\d{2,4}\\s*(-|–)\\s*\\d{1,2}/\\d{2}/\\d{2,4}")) {
+    tweet <- str_replace_all(tweet,
+                             "(\\d{1,2})\\s*(-|–)\\s*(\\d{1,2})/(\\d{2})/(\\d{2,4})",
+                             "\\1/\\4/\\5 - \\3/\\4/\\5")
+  }
   tweet <- str_replace_all(tweet,
                            "(\\d{1,2})\\s+(\\d{2})\\s*(-|–)\\s*(\\d{1,2})\\s+(\\d{2})\\s+(\\d{2,4})",
                            "\\1/\\2/\\6 - \\4/\\5/\\6")
