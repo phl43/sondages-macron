@@ -1,5 +1,6 @@
 library(tidyverse)
 library(lubridate)
+library(scales)
 library(RSelenium)
 library(rvest)
 
@@ -87,11 +88,13 @@ sondages <- html %>%
 
 # produit un graphique avec un point pour chaque sondage et une estimation
 # de la popularité de Macron au cours du temps par LOESS
-ggplot(data = sondages, mapping = aes(x = date, y = popularité)) +
+ggplot(data = sondages, mapping = aes(x = date, y = popularité / 100)) +
   geom_point() + 
   geom_smooth() +
   theme_bw() +
   ggtitle("Popularité de Macron d'après les sondages publiés par @EuropeElects") +
   xlab("Date") +
   ylab("Popularité de Macron") +
+  scale_x_date(labels = date_format("%m-%Y")) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
   theme(plot.title = element_text(hjust = 0.5))
