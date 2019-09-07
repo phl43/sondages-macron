@@ -20,27 +20,36 @@ récupérer_infos_sondage <- function(tweet) {
   tweet <- str_replace_all(tweet,
                            months_abb,
                            function(month) {str_pad(match(month, str_c(month.abb, ".")), width = 2, pad = "0")})
-  tweet <- str_replace_all(tweet, "\\'(\\d\\d)", "\\1")
-  tweet <- str_replace_all(tweet, "(\\d{1,2})\\s*-(\\d{1,2})\\s+(\\d{2})\\s+(\\d{2,4})", "\\1/\\3/\\4 - \\2/\\3/\\4")
-  tweet <- str_replace_all(tweet, "(\\d{1,2})\\s+(\\d{2})\\s+(\\d{2,4})", "\\1/\\2/\\3")
+  tweet <- str_replace_all(tweet,
+                           "\\'(\\d{2})",
+                           "\\1")
+  tweet <- str_replace_all(tweet,
+                           "(\\d{1,2})\\s+(\\d{2})\\s*(-|–)\\s*(\\d{1,2})\\s+(\\d{2})\\s+(\\d{2,4})",
+                           "\\1/\\2/\\6 - \\4/\\5/\\6")
+  tweet <- str_replace_all(tweet,
+                           "(\\d{1,2})\\s*(-|–)\\s*(\\d{1,2})\\s+(\\d{2})\\s+(\\d{2,4})",
+                           "\\1/\\4/\\5 - \\3/\\4/\\5")
+  tweet <- str_replace_all(tweet,
+                           "(\\d{1,2})\\s+(\\d{2})\\s+(\\d{2,4})",
+                           "\\1/\\2/\\3")
   
   # détermine la date à laquelle le sondage a été réalisé en prenant la moyenne du début et de la fin
   # quand le terrain s'est déroulé sur plusieurs jours
   date <- today()
-  if (str_detect(tweet, "Field work:\\s*\\d{1,2}/\\d{2}/\\d{2,4}")) {
-    date <- dmy(str_match(tweet, "Field work:\\s*(\\d{1,2}/\\d{2}/\\d{2,4})")[1,2])
-  } else if (str_detect(tweet, "Field work:\\s*(\\d{1,2}/\\d{2}/\\d{2,4}) - (\\d{1,2}/\\d{2}/\\d{2,4})")) {
-    match <- str_match(tweet, "Field work:\\s*(\\d{1,2}/\\d{2}/\\d{2,4}) - (\\d{1,2}/\\d{2}/\\d{2,4})")
-    début <- match[1,2]
-    fin <- match[1,2]
+  if (str_detect(tweet, "Field work[^\\d]*(\\d{1,2}/\\d{2}/\\d{2,4})\\s*(-|–)\\s*(\\d{1,2}/\\d{2}/\\d{2,4})")) {
+    match <- str_match(tweet, "Field work[^\\d]*(\\d{1,2}/\\d{2}/\\d{2,4})\\s*(-|–)\\s*(\\d{1,2}/\\d{2}/\\d{2,4})")
+    début <- dmy(match[1,2])
+    fin <- dmy(match[1,4])
     intervalle <- interval(début, fin)
     date <- date(intervalle@start + as.duration(intervalle) / 2)
+  } else if (str_detect(tweet, "Field work[^\\d]*\\d{1,2}/\\d{2}/\\d{2,4}")) {
+    date <- dmy(str_match(tweet, "Field work[^\\d]*(\\d{1,2}/\\d{2}/\\d{2,4})")[1,2])
   } else {
     return(tibble())
   }
   
   # détermine le taux de popularité d'après le sondage
-  popularité <- as.integer(str_match(tweet, "Approve:?\\s*(\\d{1,2})%?")[1,2])
+  popularité <- as.integer(str_match(tweet, "Approve[^\\d]*(\\d{1,2})%?")[1,2])
   
   # renvoie une structure avec les informations qui ont été récupérées
   return(tibble(date = c(date), popularité = c(popularité)))
@@ -62,7 +71,7 @@ rd$open()
 
 # url de la recherche sur Twitter des tweets de @EuropeElects qui donnent les résultats de sondages de
 # popularité de Macron en tant que président
-url <- "https://twitter.com/search?f=tweets&vertical=default&q=%22President%20Macron%20Approval%20Rating%22%20from%3AEuropeElects&src=unkn"
+url <- "https://twitter.com/search?f=tweets&vertical=default&q=%22President%20Macron%20Approval%20Rating%22%20from%3AEuropeElects"
 
 # ouvre l'url dans Chrome
 rd$navigate(url)
@@ -79,6 +88,12 @@ while(page_length != last_page_length) {
 
 # récupère le code source de la page et lit celui-ci avec rvest
 html <- rd$getPageSource()[[1]] %>% read_html()
+
+# ferme la session
+rd$close()
+
+# arrête le serveur sur Docker
+system("docker stop $(docker ps -q)")
 
 # récupère les informations sur chaque sondage et crée une structure de données pour les stocker
 sondages <- html %>%
