@@ -10,7 +10,7 @@ library(rvest)
 # cette fonction analyse le contenu d'un tweet et renvoie une structure de données qui contient la date
 # à laquelle le sondage a été réalisé et la popularité de Macron d'après celui-ci
 récupérer_infos_sondage <- function(tweet) {
-  # exclue le tweet qui compare la popularité de Macron avant et après la révélation de l'affaire Benalla
+  # exclut le tweet qui compare la popularité de Macron avant et après la révélation de l'affaire Benalla
   if (str_detect(tweet, "benalla")) {
     return(tibble())
   }
