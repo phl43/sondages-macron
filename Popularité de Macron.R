@@ -11,6 +11,7 @@ library(rvest)
 # à laquelle le sondage a été réalisé et la popularité de Macron d'après celui-ci
 récupérer_infos_sondage <- function(tweet) {
   # exclut le tweet qui compare la popularité de Macron avant et après la révélation de l'affaire Benalla
+  # pour éviter de compter les sondages en question deux fois
   if (str_detect(tweet, "benalla")) {
     return(tibble())
   }
@@ -115,7 +116,7 @@ sondages <- html %>%
 # de la popularité de Macron au cours du temps par LOESS
 ggplot(data = sondages, mapping = aes(x = date, y = popularité / 100)) +
   geom_point() + 
-  geom_smooth() +
+  geom_smooth(color = "orange", span = 0.15, method.args = list(degree = 1)) +
   theme_bw() +
   ggtitle("Popularité de Macron d'après les sondages publiés par @EuropeElects") +
   xlab("Date") +
