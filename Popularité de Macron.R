@@ -7,6 +7,39 @@ library(rvest)
 # NOTE: pour que ce script marche, il faut que Docker (https://www.docker.com) soit installé
 # sur votre ordinateur et il faut qu'il soit ouvert avant d'exécuter le script
 
+# cette fonction récupère les tweets publiés par @EuropeElect entre début et fin qui donnent les résultats de sondages
+# de popularité de Macron en tant que président, analyse leur contenu et renvoie un vecteur contenant cette information
+récupérer_infos_popularité <- function(rd, début, fin) {
+  # construct the url with the right search query
+  url <- paste0("https://twitter.com/search?f=tweets&vertical=default&q=%22President%20Macron%20Approval%20Rating%22%20from%3AEuropeElects%20since%3A",
+                début,
+                "%20until%3A",
+                fin,
+                sep = "")
+  
+  # ouvre l'url dans Chrome
+  rd$navigate(url)
+  
+  # scroll vers le bas jusqu'à ce que tous les tweets soient affichés
+  last_page_length <- 0
+  page_length <- as.integer(rd$executeScript("return document.body.scrollHeight;"))
+  while(page_length > last_page_length) {
+    last_page_length <- page_length
+    rd$executeScript("window.scroll(0, document.body.scrollHeight);")
+    Sys.sleep(1)
+    page_length <- as.integer(rd$executeScript("return document.body.scrollHeight;"))
+  }
+  
+  # récupère le code source de la page et lit celui-ci avec rvest
+  html <- rd$getPageSource()[[1]] %>% read_html()
+  
+  # récupère les informations sur chaque sondage et crée une structure de données pour les stocker
+  html %>%
+    html_nodes(".tweet-text") %>%
+    html_text() %>%
+    map_df(récupérer_infos_sondage)
+}
+
 # cette fonction analyse le contenu d'un tweet et renvoie une structure de données qui contient la date
 # à laquelle le sondage a été réalisé et la popularité de Macron d'après celui-ci
 récupérer_infos_sondage <- function(tweet) {
@@ -80,37 +113,28 @@ rd <- remoteDriver(remoteServerAddr = "localhost",
 # quand j'exécute le script une deuxième fois)
 rd$open()
 
-# url de la recherche sur Twitter des tweets de @EuropeElects qui donnent les résultats de sondages de
-# popularité de Macron en tant que président
-url <- "https://twitter.com/search?f=tweets&vertical=default&q=%22President%20Macron%20Approval%20Rating%22%20from%3AEuropeElects"
+# génère une suite de dates séparées entre elles de 10 jours pour effectuer la recherche sur Twitter (note : je découpe
+# la recherche par périodes car sinon Twitter ignore certains tweets pour une raison que j'ignore)
+dates_début <- seq(ymd("2018-01-01"), today(), by = paste0(as.character(120), " days"))
 
-# ouvre l'url dans Chrome
-rd$navigate(url)
+# construit la liste des arguments pour pmap_df (note : je dois ajouter un jour à la date de fin de chaque période
+# car la fonction de recherche de Twitter exclut la valeur du paramètre "until")
+args <- list(
+  rd = c(rd),
+  début = as.character(dates_début),
+  fin = ifelse(dates_début + 120 - 1 < today(),
+               as.character(dates_début + 120),
+               as.character(today() + 1))
+)
 
-# scroll vers le bas jusqu'à ce que tous les tweets soient affichés
-last_page_length <- 0
-page_length <- as.integer(rd$executeScript("return document.body.scrollHeight;"))
-while(page_length != last_page_length) {
-  last_page_length <- page_length
-  rd$executeScript("window.scroll(0, document.body.scrollHeight);")
-  Sys.sleep(1)
-  page_length <- as.integer(rd$executeScript("return document.body.scrollHeight;"))
-}
-
-# récupère le code source de la page et lit celui-ci avec rvest
-html <- rd$getPageSource()[[1]] %>% read_html()
+# scrape the data
+sondages <- pmap_df(args, récupérer_infos_popularité)
 
 # ferme la session
 rd$close()
 
 # arrête le serveur sur Docker
 system("docker stop $(docker ps -q)")
-
-# récupère les informations sur chaque sondage et crée une structure de données pour les stocker
-sondages <- html %>%
-  html_nodes(".TweetTextSize.js-tweet-text.tweet-text") %>%
-  html_text() %>%
-  map_df(récupérer_infos_sondage)
 
 # produit un graphique avec un point pour chaque sondage et une estimation
 # de la popularité de Macron au cours du temps par LOESS
