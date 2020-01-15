@@ -113,17 +113,19 @@ rd <- remoteDriver(remoteServerAddr = "localhost",
 # quand j'exécute le script une deuxième fois)
 rd$open()
 
+période <- 45
+
 # génère une suite de dates séparées entre elles de 10 jours pour effectuer la recherche sur Twitter (note : je découpe
 # la recherche par périodes car sinon Twitter ignore certains tweets pour une raison que j'ignore)
-dates_début <- seq(ymd("2018-01-01"), today(), by = paste0(as.character(120), " days"))
+dates_début <- seq(ymd("2018-01-01"), today(), by = paste0(as.character(période), " days"))
 
 # construit la liste des arguments pour pmap_df (note : je dois ajouter un jour à la date de fin de chaque période
 # car la fonction de recherche de Twitter exclut la valeur du paramètre "until")
 args <- list(
   rd = c(rd),
   début = as.character(dates_début),
-  fin = ifelse(dates_début + 120 - 1 < today(),
-               as.character(dates_début + 120),
+  fin = ifelse(dates_début + période - 1 < today(),
+               as.character(dates_début + période),
                as.character(today() + 1))
 )
 
