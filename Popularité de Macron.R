@@ -11,7 +11,7 @@ library(rvest)
 # de popularité de Macron en tant que président, analyse leur contenu et renvoie un vecteur contenant cette information
 récupérer_infos_popularité <- function(rd, début, fin) {
   # construct the url with the right search query
-  url <- paste0("https://twitter.com/search?f=tweets&vertical=default&q=%22President%20Macron%20Approval%20Rating%22%20from%3AEuropeElects%20since%3A",
+  url <- paste0("https://twitter.com/search?f=live&vertical=default&q=%22President%20Macron%20Approval%20Rating%22%20from%3AEuropeElects%20since%3A",
                 début,
                 "%20until%3A",
                 fin,
@@ -25,17 +25,17 @@ récupérer_infos_popularité <- function(rd, début, fin) {
   page_length <- as.integer(rd$executeScript("return document.body.scrollHeight;"))
   while(page_length > last_page_length) {
     last_page_length <- page_length
-    rd$executeScript("window.scroll(0, document.body.scrollHeight);")
+    rd$executeScript("window.scrollTo(0, document.body.scrollHeight);")
     Sys.sleep(1)
     page_length <- as.integer(rd$executeScript("return document.body.scrollHeight;"))
   }
   
   # récupère le code source de la page et lit celui-ci avec rvest
-  html <- rd$getPageSource()[[1]] %>% read_html()
+  html <- read_html(rd$getPageSource()[[1]])
   
   # récupère les informations sur chaque sondage et crée une structure de données pour les stocker
   html %>%
-    html_nodes(".tweet-text") %>%
+    html_nodes(".css-901oao.r-hkyrab.r-1qd0xha.r-a023e6.r-16dba41.r-ad9z0x.r-bcqeeo.r-bnwqim.r-qvutc0") %>%
     html_text() %>%
     map_df(récupérer_infos_sondage)
 }
@@ -48,6 +48,9 @@ récupérer_infos_sondage <- function(tweet) {
   if (str_detect(tweet, "benalla")) {
     return(tibble())
   }
+  
+  # j'ai remarqué que "January" avait été écrit avec une coquille dans un tweet
+  tweet <- str_replace_all(tweet, "Janunary", "January")
   
   # met toutes les dates au même format dans le tweet, ce qui est nécessaire car
   # @EuropeElects n'utilise pas toujours le même format dans ses tweets
@@ -71,7 +74,7 @@ récupérer_infos_sondage <- function(tweet) {
                            "(\\d{1,2})\\s+(\\d{2})\\s*(-|–)\\s*(\\d{1,2})\\s+(\\d{2})\\s+(\\d{2,4})",
                            "\\1/\\2/\\6 - \\4/\\5/\\6")
   tweet <- str_replace_all(tweet,
-                           "(\\d{1,2})\\s*(-|–)\\s*(\\d{1,2})\\s+(\\d{2})\\s+(\\d{2,4})",
+                           "(\\d{1,2})\\s*(-|–|\\.)\\s*(\\d{1,2})\\s+(\\d{2})\\s+(\\d{2,4})",
                            "\\1/\\4/\\5 - \\3/\\4/\\5")
   tweet <- str_replace_all(tweet,
                            "(\\d{1,2})\\s+(\\d{2})\\s+(\\d{2,4})",
@@ -80,14 +83,14 @@ récupérer_infos_sondage <- function(tweet) {
   # détermine la date à laquelle le sondage a été réalisé en prenant la moyenne du début et de la fin
   # quand le terrain s'est déroulé sur plusieurs jours
   date <- today()
-  if (str_detect(tweet, "Field work[^\\d]*(\\d{1,2}/\\d{2}/\\d{2,4})\\s*(-|–)\\s*(\\d{1,2}/\\d{2}/\\d{2,4})")) {
-    match <- str_match(tweet, "Field work[^\\d]*(\\d{1,2}/\\d{2}/\\d{2,4})\\s*(-|–)\\s*(\\d{1,2}/\\d{2}/\\d{2,4})")
+  if (str_detect(tweet, "Field\\s*work[^\\d]*(\\d{1,2}/\\d{2}/\\d{2,4})\\s*-\\s*(\\d{1,2}/\\d{2}/\\d{2,4})")) {
+    match <- str_match(tweet, "Field\\s*work[^\\d]*(\\d{1,2}/\\d{2}/\\d{2,4})\\s*-\\s*(\\d{1,2}/\\d{2}/\\d{2,4})")
     début <- dmy(match[1,2])
-    fin <- dmy(match[1,4])
+    fin <- dmy(match[1,3])
     intervalle <- interval(début, fin)
     date <- date(intervalle@start + as.duration(intervalle) / 2)
-  } else if (str_detect(tweet, "Field work[^\\d]*\\d{1,2}/\\d{2}/\\d{2,4}")) {
-    date <- dmy(str_match(tweet, "Field work[^\\d]*(\\d{1,2}/\\d{2}/\\d{2,4})")[1,2])
+  } else if (str_detect(tweet, "Field\\s*work[^\\d]*\\d{1,2}/\\d{2}/\\d{2,4}")) {
+    date <- dmy(str_match(tweet, "Field\\s*work[^\\d]*(\\d{1,2}/\\d{2}/\\d{2,4})")[1,2])
   } else {
     return(tibble())
   }
@@ -113,10 +116,10 @@ rd <- remoteDriver(remoteServerAddr = "localhost",
 # quand j'exécute le script une deuxième fois)
 rd$open()
 
-période <- 45
+période <- 20
 
-# génère une suite de dates séparées entre elles de 10 jours pour effectuer la recherche sur Twitter (note : je découpe
-# la recherche par périodes car sinon Twitter ignore certains tweets pour une raison que j'ignore)
+# génère une suite de dates séparées entre elles de période jours pour effectuer la recherche sur Twitter (note : je
+# découpe la recherche par périodes car sinon Twitter ignore certains tweets pour une raison que j'ignore)
 dates_début <- seq(ymd("2018-01-01"), today(), by = paste0(as.character(période), " days"))
 
 # construit la liste des arguments pour pmap_df (note : je dois ajouter un jour à la date de fin de chaque période
@@ -140,7 +143,7 @@ system("docker stop $(docker ps -q)")
 
 # produit un graphique avec un point pour chaque sondage et une estimation
 # de la popularité de Macron au cours du temps par LOESS
-ggplot(data = sondages, mapping = aes(x = date, y = popularité / 100)) +
+ggplot(data = filter(sondages, date >= ymd("2018-01-01")), mapping = aes(x = date, y = popularité / 100)) +
   geom_point() + 
   geom_smooth(color = "orange", span = 0.15, method.args = list(degree = 1)) +
   theme_bw() +
