@@ -112,11 +112,11 @@ rd <- remoteDriver(remoteServerAddr = "localhost",
                    port = 4445L,
                    browserName = "chrome")
 
-# démarre une session (pour une raison que j'ignore, ça ne marche souvent pas la première fois, mais ça marche
-# quand j'exécute le script une deuxième fois)
+# démarre une session (pour une raison que j'ignore, ça ne marche souvent pas la première fois, mais au bout de
+# quelques essais ça finit par marcher)
 rd$open()
 
-période <- 20
+période <- 15
 
 # génère une suite de dates séparées entre elles de période jours pour effectuer la recherche sur Twitter (note : je
 # découpe la recherche par périodes car sinon Twitter ignore certains tweets pour une raison que j'ignore)
